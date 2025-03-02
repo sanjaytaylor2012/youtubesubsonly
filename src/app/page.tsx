@@ -6,13 +6,33 @@ import { SignIn } from "@/components/SignIn/SignIn";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Videos } from "@/components/Videos/Videos";
+import { Channel, Video } from "@/interfaces/interfaces";
+import dummy_data from "@/components/dummy_data.json";
+import { Loading } from "@/components/Loading/Loading";
 
 export default function Home() {
-  const { data: session } = useSession();
-  const [videos, setVideos] = useState<Video[]>([]);
+  const { data: session, status } = useSession();
+  const [videos, setVideos] = useState<Channel[]>([]);
   const [numDays, setNumDays] = useState(7);
 
   const fetchVideos = async (numDays: number) => {
+    const storedData = localStorage.getItem("channelData");
+    const storedTimestamp = localStorage.getItem("lastFetchTime");
+    const now = Date.now();
+    const threeHours = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
+    //check cache before making api call
+    if (
+      storedData &&
+      storedTimestamp &&
+      now - parseInt(storedTimestamp) < threeHours
+    ) {
+      console.log("Using cached data from local storage");
+      setVideos(JSON.parse(storedData));
+      return;
+    }
+
+    //if not cached then make api call
     const res = await fetch(`/api/youtube/subscriptions`, {
       method: "POST",
       headers: {
@@ -20,11 +40,16 @@ export default function Home() {
       },
       body: JSON.stringify({ numDays }),
     });
-
     const data = await res.json();
-
     setVideos(data);
-    console.log(videos);
+
+    // const data = dummy_data;
+    // setVideos(data);
+
+    console.log("caching data in local storage");
+    localStorage.setItem("channelData", JSON.stringify(data));
+    localStorage.setItem("lastFetchTime", now.toString());
+    // console.log(data);
   };
 
   useEffect(() => {
@@ -33,8 +58,9 @@ export default function Home() {
 
   return (
     <div className="flex w-full h-full p-4">
-      {session && <Videos />}
-      {!session && <SignIn />}
+      {status == "loading" && <Loading />}
+      {status != "loading" && session && <Videos channels={videos} />}
+      {status != "loading" && !session && <SignIn />}
     </div>
   );
 }
